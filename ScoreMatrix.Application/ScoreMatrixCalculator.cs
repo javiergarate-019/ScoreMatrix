@@ -6,6 +6,8 @@ public sealed class ScoreMatrixCalculator(
     OddsConverter oddsConverter,
     LambdaOptimizer lambdaOptimizer)
 {
+    private const int SummaryAggregationGoals = 15;
+
     public ScoreMatrixResult Calculate(MatchInput input)
     {
         var lambda = ResolveLambdas(input);
@@ -14,6 +16,9 @@ public sealed class ScoreMatrixCalculator(
             : new PoissonScoreModel();
 
         var scores = model.Calculate(lambda.Home, lambda.Away, input.MaxGoals);
+        var summaryScores = input.MaxGoals >= SummaryAggregationGoals
+            ? scores
+            : model.Calculate(lambda.Home, lambda.Away, SummaryAggregationGoals);
         var matrixMass = scores.Sum(score => score.Probability);
 
         return new ScoreMatrixResult
@@ -23,12 +28,12 @@ public sealed class ScoreMatrixCalculator(
             LambdaHome = lambda.Home,
             LambdaAway = lambda.Away,
             Scores = scores,
-            HomeWinProbability = scores.Where(score => score.HomeGoals > score.AwayGoals).Sum(score => score.Probability),
-            DrawProbability = scores.Where(score => score.HomeGoals == score.AwayGoals).Sum(score => score.Probability),
-            AwayWinProbability = scores.Where(score => score.HomeGoals < score.AwayGoals).Sum(score => score.Probability),
-            OverUnderSummary = BuildOverUnder(scores),
-            BothTeamsToScoreYes = scores.Where(score => score.HomeGoals > 0 && score.AwayGoals > 0).Sum(score => score.Probability),
-            BothTeamsToScoreNo = scores.Where(score => score.HomeGoals == 0 || score.AwayGoals == 0).Sum(score => score.Probability),
+            HomeWinProbability = summaryScores.Where(score => score.HomeGoals > score.AwayGoals).Sum(score => score.Probability),
+            DrawProbability = summaryScores.Where(score => score.HomeGoals == score.AwayGoals).Sum(score => score.Probability),
+            AwayWinProbability = summaryScores.Where(score => score.HomeGoals < score.AwayGoals).Sum(score => score.Probability),
+            OverUnderSummary = BuildOverUnder(summaryScores),
+            BothTeamsToScoreYes = summaryScores.Where(score => score.HomeGoals > 0 && score.AwayGoals > 0).Sum(score => score.Probability),
+            BothTeamsToScoreNo = summaryScores.Where(score => score.HomeGoals == 0 || score.AwayGoals == 0).Sum(score => score.Probability),
             MatrixProbabilityMass = matrixMass,
             ResidualProbability = Math.Max(0, 1 - matrixMass),
             MostLikelyScore = scores.MaxBy(score => score.Probability)

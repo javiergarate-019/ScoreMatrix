@@ -16,6 +16,11 @@ public sealed class OddsConverter
         var rawAway = 1.0 / awayOdds;
         var total = rawHome + rawDraw + rawAway;
 
+        if (total < 1)
+        {
+            throw new ScoreMatrixValidationException("Las cuotas 1X2 implican margen negativo para el bookmaker. Revisa los valores antes de calcular.");
+        }
+
         return new MarketProbabilities(rawHome / total, rawDraw / total, rawAway / total);
     }
 }

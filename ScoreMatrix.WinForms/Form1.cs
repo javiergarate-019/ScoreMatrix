@@ -8,6 +8,13 @@ public sealed class Form1 : Form
 {
     private readonly ScoreMatrixCalculator _calculator = new(new OddsConverter(), new LambdaOptimizer());
     private readonly CsvExporter _csvExporter = new();
+    private readonly ToolTip _toolTip = new()
+    {
+        AutoPopDelay = 12000,
+        InitialDelay = 400,
+        ReshowDelay = 100,
+        ShowAlways = true
+    };
 
     private readonly TextBox _homeTeamText = new() { Text = "Local" };
     private readonly TextBox _awayTeamText = new() { Text = "Visitante" };
@@ -31,6 +38,7 @@ public sealed class Form1 : Form
     public Form1()
     {
         Text = "ScoreMatrix";
+        Icon = Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath) ?? Icon;
         MinimumSize = new Size(1120, 720);
         StartPosition = FormStartPosition.CenterScreen;
 
@@ -40,6 +48,7 @@ public sealed class Form1 : Form
         _displayCombo.SelectedIndex = 0;
 
         BuildLayout();
+        ConfigureToolTips();
         WireEvents();
         CalculateAndRender();
     }
@@ -53,9 +62,9 @@ public sealed class Form1 : Form
             RowCount = 3,
             Padding = new Padding(12)
         };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 236));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
 
         root.Controls.Add(BuildInputPanel(), 0, 0);
         root.Controls.Add(_matrixGrid, 0, 1);
@@ -66,6 +75,7 @@ public sealed class Form1 : Form
         _matrixGrid.SelectionMode = DataGridViewSelectionMode.CellSelect;
         _matrixGrid.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         _matrixGrid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        _matrixGrid.TopLeftHeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
         _summaryList.Columns.Add("Mercado", 240);
         _summaryList.Columns.Add("Probabilidad", 140);
@@ -86,15 +96,17 @@ public sealed class Form1 : Form
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12.5f));
         }
 
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
 
         AddField(panel, "Equipo local", _homeTeamText, 0, 0);
         AddField(panel, "Equipo visitante", _awayTeamText, 2, 0);
         panel.Controls.Add(_oddsModeRadio, 4, 0);
+        _oddsModeRadio.Anchor = AnchorStyles.Left;
         panel.Controls.Add(_lambdaModeRadio, 5, 0);
+        _lambdaModeRadio.Anchor = AnchorStyles.Left;
 
         AddField(panel, "Odd local", _homeOddsInput, 0, 1);
         AddField(panel, "Odd empate", _drawOddsInput, 2, 1);
@@ -108,18 +120,21 @@ public sealed class Form1 : Form
         AddField(panel, "Rho", _rhoInput, 0, 3);
         AddField(panel, "Vista", _displayCombo, 2, 3);
 
-        var calculateButton = new Button { Text = "Calcular", Dock = DockStyle.Fill };
+        var calculateButton = new Button { Text = "Calcular", Dock = DockStyle.Fill, Margin = new Padding(2, 18, 8, 4) };
         calculateButton.Click += (_, _) => CalculateAndRender();
         panel.Controls.Add(calculateButton, 4, 3);
 
-        var exportButton = new Button { Text = "Exportar CSV", Dock = DockStyle.Fill };
+        var exportButton = new Button { Text = "Exportar CSV", Dock = DockStyle.Fill, Margin = new Padding(2, 18, 8, 4) };
         exportButton.Click += (_, _) => ExportCsv();
         panel.Controls.Add(exportButton, 5, 3);
 
+        var helpButton = new Button { Text = "Ayuda", Dock = DockStyle.Fill, Margin = new Padding(2, 18, 8, 4) };
+        helpButton.Click += (_, _) => ShowHelp();
+        panel.Controls.Add(helpButton, 6, 3);
+
         _lambdaLabel.Dock = DockStyle.Fill;
         _lambdaLabel.TextAlign = ContentAlignment.MiddleLeft;
-        panel.Controls.Add(_lambdaLabel, 6, 3);
-        panel.SetColumnSpan(_lambdaLabel, 2);
+        panel.Controls.Add(_lambdaLabel, 7, 3);
 
         return panel;
     }
@@ -141,15 +156,47 @@ public sealed class Form1 : Form
 
     private static void AddField(TableLayoutPanel panel, string label, Control control, int column, int row)
     {
-        var wrapper = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        wrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
-        wrapper.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        wrapper.Controls.Add(new Label { Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-        control.Dock = DockStyle.Fill;
-        wrapper.Controls.Add(control, 1, 0);
+        var wrapper = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(2, 0, 8, 4)
+        };
+        wrapper.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+        wrapper.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        wrapper.Controls.Add(new Label
+        {
+            Text = label,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft
+        }, 0, 0);
+        control.Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top;
+        wrapper.Controls.Add(control, 0, 1);
         panel.Controls.Add(wrapper, column, row);
         panel.SetColumnSpan(wrapper, 2);
     }
+
+    private void ConfigureToolTips()
+    {
+        SetTip(_homeTeamText, "Nombre del equipo local. Solo se usa para rotular la matriz y el CSV.");
+        SetTip(_awayTeamText, "Nombre del equipo visitante. Solo se usa para rotular la matriz y el CSV.");
+        SetTip(_oddsModeRadio, "Calcula los goles esperados a partir de las cuotas 1X2 ingresadas.");
+        SetTip(_lambdaModeRadio, "Usa directamente los goles esperados que ingreses para cada equipo.");
+        SetTip(_homeOddsInput, "Cuota decimal para victoria local. Debe ser mayor que 1.");
+        SetTip(_drawOddsInput, "Cuota decimal para empate. Debe ser mayor que 1.");
+        SetTip(_awayOddsInput, "Cuota decimal para victoria visitante. Debe ser mayor que 1.");
+        SetTip(_homeLambdaInput, "Goles esperados del local. Se usa solo en modo Goles esperados.");
+        SetTip(_awayLambdaInput, "Goles esperados del visitante. Se usa solo en modo Goles esperados.");
+        SetTip(_maxGoalsInput, "Mayor marcador que se muestra en la matriz. Puede estar entre 3 y 15.");
+        SetTip(_modelCombo, "Modelo matematico para calcular la matriz: Poisson simple o Dixon-Coles.");
+        SetTip(_rhoInput, "Parametro Dixon-Coles para ajustar marcadores bajos. Se usa solo con el modelo Dixon-Coles.");
+        SetTip(_displayCombo, "Probabilidades muestra el porcentaje estimado de cada marcador. Odds justas muestra 1 dividido por esa probabilidad.");
+        SetTip(_matrixGrid, "Cada celda muestra la probabilidad estimada del marcador exacto o su cuota justa, segun la vista elegida.");
+        SetTip(_summaryList, "Probabilidad es la chance estimada del mercado agregado. Odd justa es 1 dividido por esa probabilidad.");
+    }
+
+    private void SetTip(Control control, string text) => _toolTip.SetToolTip(control, text);
 
     private void WireEvents()
     {
@@ -211,7 +258,7 @@ public sealed class Form1 : Form
             return;
         }
 
-        _lambdaLabel.Text = $"λ local {_lastResult.LambdaHome:0.000}  |  λ visitante {_lastResult.LambdaAway:0.000}";
+        _lambdaLabel.Text = $"Lambdas usados: local {_lastResult.LambdaHome:0.000} | visitante {_lastResult.LambdaAway:0.000}";
         RenderMatrix(_lastResult);
         RenderSummary(_lastResult);
     }
@@ -238,9 +285,15 @@ public sealed class Form1 : Form
 
             var row = _matrixGrid.Rows.Add(values);
             _matrixGrid.Rows[row].HeaderCell.Value = homeGoals.ToString(CultureInfo.InvariantCulture);
+            for (var awayGoals = 0; awayGoals <= maxGoals; awayGoals++)
+            {
+                var score = result.Scores.First(item => item.HomeGoals == homeGoals && item.AwayGoals == awayGoals);
+                _matrixGrid.Rows[row].Cells[awayGoals].ToolTipText =
+                    $"{score.ScoreLabel}: probabilidad {FormatPercent(score.Probability)}, odd justa {FormatOdds(score.Probability)}";
+            }
         }
 
-        _matrixGrid.TopLeftHeaderCell.Value = $"{result.HomeTeamName} \\ {result.AwayTeamName}";
+        _matrixGrid.TopLeftHeaderCell.Value = "L/V";
     }
 
     private void RenderSummary(ScoreMatrixResult result)
@@ -266,8 +319,8 @@ public sealed class Form1 : Form
             AddSummary($"Más probable ({result.MostLikelyScore.ScoreLabel})", result.MostLikelyScore.Probability);
         }
 
-        AddSummary("Masa matriz mostrada", result.MatrixProbabilityMass);
-        AddSummary("Residual fuera de rango", result.ResidualProbability);
+        AddSummary("Probabilidad cubierta por la grilla", result.MatrixProbabilityMass);
+        AddSummary("Probabilidad fuera de la grilla", result.ResidualProbability);
     }
 
     private void AddSummary(string name, double probability)
@@ -301,15 +354,21 @@ public sealed class Form1 : Form
         File.WriteAllText(dialog.FileName, _csvExporter.Export(_lastResult));
     }
 
+    private void ShowHelp()
+    {
+        using var form = new HelpForm();
+        form.ShowDialog(this);
+    }
+
     private static NumericUpDown CreateNumeric(decimal value, decimal min, decimal max, int decimals, decimal increment = 0.01m)
         => new()
         {
-            Value = value,
             Minimum = min,
             Maximum = max,
             DecimalPlaces = decimals,
             Increment = increment,
-            ThousandsSeparator = false
+            ThousandsSeparator = false,
+            Value = value
         };
 
     private static string FormatPercent(double probability) => $"{probability * 100:0.00}%";
