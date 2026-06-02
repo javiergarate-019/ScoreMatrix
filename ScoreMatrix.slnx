@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="ScoreMatrix.Application/ScoreMatrix.Application.csproj" />
+  <Project Path="ScoreMatrix.Domain/ScoreMatrix.Domain.csproj" />
+  <Project Path="ScoreMatrix.WinForms/ScoreMatrix.WinForms.csproj" />
+</Solution>
