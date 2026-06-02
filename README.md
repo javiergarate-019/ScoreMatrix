@@ -1,137 +1,137 @@
 # ScoreMatrix
 
-ScoreMatrix is a Windows desktop app for estimating football exact-score probabilities and fair odds from a simple mathematical model.
+ScoreMatrix es una aplicacion desktop para Windows que estima probabilidades de resultados exactos de futbol y sus cuotas justas equivalentes a partir de un modelo matematico.
 
-The app can start from either 1X2 market odds or manually entered expected goals, then builds a score matrix such as `0-0`, `1-0`, `2-1`, etc. Each cell can be viewed as either a probability or the equivalent fair decimal odd.
+La app puede partir de cuotas 1X2 de mercado o de goles esperados ingresados manualmente. Luego construye una matriz de marcadores como `0-0`, `1-0`, `2-1`, etc. Cada celda puede verse como probabilidad o como cuota decimal justa.
 
-Current version: `0.01`
+Version actual: `0.01`
 
-## Features
+## Funcionalidades
 
-- WinForms desktop UI for Windows.
-- Input from 1X2 decimal odds: home win, draw, away win.
-- Input from manual expected goals: home lambda and away lambda.
-- Proportional no-margin conversion for 1X2 odds.
-- Lambda inference from 1X2 probabilities.
-- Poisson exact-score model.
-- Optional Dixon-Coles adjustment for low scores.
-- Configurable visible score range from 3 to 15 goals.
-- Probability and fair-odds matrix views.
-- Aggregated summary:
-  - Home win, draw, away win.
-  - Over/Under 0.5, 1.5, 2.5, 3.5.
-  - Both Teams To Score: Yes/No.
-  - 0-0 and 1-1.
-  - Most likely score.
-  - Probability covered by the visible grid.
-  - Probability outside the visible grid.
-- CSV export.
-- Built-in Help window explaining the model and terminology.
+- UI desktop WinForms para Windows.
+- Entrada desde cuotas decimales 1X2: victoria local, empate, victoria visitante.
+- Entrada desde goles esperados manuales: lambda local y lambda visitante.
+- Conversion proporcional de cuotas 1X2 a probabilidades sin margen.
+- Inferencia de lambdas desde probabilidades 1X2.
+- Modelo Poisson para resultados exactos.
+- Ajuste Dixon-Coles opcional para marcadores bajos.
+- Rango visible configurable entre 3 y 15 goles.
+- Vista de matriz en probabilidades o cuotas justas.
+- Resumen agregado:
+  - Victoria local, empate, victoria visitante.
+  - Over/Under 0.5, 1.5, 2.5 y 3.5.
+  - Both Teams To Score: Si/No.
+  - 0-0 y 1-1.
+  - Marcador mas probable.
+  - Probabilidad cubierta por la grilla.
+  - Probabilidad fuera de la grilla.
+- Exportacion a CSV.
+- Ventana de ayuda integrada con explicacion del modelo y los conceptos.
 
-## Requirements
+## Requisitos
 
 - Windows.
 - .NET 10 SDK.
 
-The WinForms project targets:
+El proyecto WinForms usa:
 
 ```text
 net10.0-windows
 ```
 
-## Build And Run
+## Compilar Y Ejecutar
 
-From the repository root:
+Desde la raiz del repositorio:
 
 ```powershell
 dotnet build
 dotnet run --project ScoreMatrix.WinForms\ScoreMatrix.WinForms.csproj
 ```
 
-You can also run the built executable after building:
+Tambien se puede ejecutar el binario generado despues de compilar:
 
 ```powershell
 ScoreMatrix.WinForms\bin\Debug\net10.0-windows\ScoreMatrix.WinForms.exe
 ```
 
-## How It Works
+## Como Funciona
 
-### 1. Odds To No-Margin Probabilities
+### 1. De cuotas a probabilidades sin margen
 
-When using 1X2 odds, ScoreMatrix first converts decimal odds into implied probabilities:
-
-```text
-pHomeRaw = 1 / homeOdds
-pDrawRaw = 1 / drawOdds
-pAwayRaw = 1 / awayOdds
-```
-
-Then it removes bookmaker margin with proportional normalization:
+Cuando se usan cuotas 1X2, ScoreMatrix convierte primero cada cuota decimal en probabilidad implicita:
 
 ```text
-sum = pHomeRaw + pDrawRaw + pAwayRaw
-
-pHome = pHomeRaw / sum
-pDraw = pDrawRaw / sum
-pAway = pAwayRaw / sum
+pLocalBruta = 1 / cuotaLocal
+pEmpateBruta = 1 / cuotaEmpate
+pVisitanteBruta = 1 / cuotaVisitante
 ```
 
-If the raw implied probabilities sum to less than `1`, the app blocks the calculation because that would imply a negative bookmaker margin.
-
-### 2. 1X2 Probabilities To Lambdas
-
-The app infers:
+Luego quita el margen del bookmaker con normalizacion proporcional:
 
 ```text
-lambdaHome
-lambdaAway
+suma = pLocalBruta + pEmpateBruta + pVisitanteBruta
+
+pLocal = pLocalBruta / suma
+pEmpate = pEmpateBruta / suma
+pVisitante = pVisitanteBruta / suma
 ```
 
-These represent expected goals for the home and away teams.
+Si las probabilidades implicitas brutas suman menos que `1`, la app bloquea el calculo porque eso implicaria margen negativo para el bookmaker.
 
-The optimizer tests lambda pairs, builds an internal Poisson score matrix for each pair, then aggregates it into:
+### 2. De probabilidades 1X2 a lambdas
+
+La app infiere:
 
 ```text
-P(home win) = sum of scores where home goals > away goals
-P(draw) = sum of scores where home goals == away goals
-P(away win) = sum of scores where home goals < away goals
+lambdaLocal
+lambdaVisitante
 ```
 
-It chooses the pair that minimizes:
+Estos valores representan los goles esperados del equipo local y visitante.
+
+El optimizador prueba pares de lambdas, construye una matriz Poisson interna para cada par y la agrega en tres probabilidades:
+
+```text
+P(local gana) = suma de marcadores donde goles local > goles visitante
+P(empate) = suma de marcadores donde goles local == goles visitante
+P(visitante gana) = suma de marcadores donde goles local < goles visitante
+```
+
+Luego elige el par que minimiza:
 
 ```text
 error =
-  (homeModel - homeMarket)^2
-+ (drawModel - drawMarket)^2
-+ (awayModel - awayMarket)^2
+  (localModelo - localMercado)^2
++ (empateModelo - empateMercado)^2
++ (visitanteModelo - visitanteMercado)^2
 ```
 
-The current optimizer uses a broad grid search followed by local refinement.
+El optimizador actual usa una busqueda amplia por grilla seguida de refinamiento local.
 
-### 3. Poisson Score Matrix
+### 3. Matriz Poisson
 
-The base model assumes independent Poisson goal distributions:
+El modelo base asume distribuciones Poisson independientes:
 
 ```text
-Home goals ~ Poisson(lambdaHome)
-Away goals ~ Poisson(lambdaAway)
+Goles local ~ Poisson(lambdaLocal)
+Goles visitante ~ Poisson(lambdaVisitante)
 ```
 
-Exact-score probability:
+La probabilidad de un marcador exacto se calcula asi:
 
 ```text
-P(i-j) = Poisson(i, lambdaHome) * Poisson(j, lambdaAway)
+P(i-j) = Poisson(i, lambdaLocal) * Poisson(j, lambdaVisitante)
 ```
 
-Fair odds are calculated as:
+La cuota justa se calcula como:
 
 ```text
-fairOdds = 1 / probability
+cuotaJusta = 1 / probabilidad
 ```
 
-### 4. Dixon-Coles Adjustment
+### 4. Ajuste Dixon-Coles
 
-Dixon-Coles starts from the Poisson matrix and adjusts low-score outcomes:
+Dixon-Coles parte de la matriz Poisson y ajusta marcadores bajos:
 
 ```text
 0-0
@@ -140,40 +140,40 @@ Dixon-Coles starts from the Poisson matrix and adjusts low-score outcomes:
 1-1
 ```
 
-The manual `rho` parameter controls the direction and strength of the adjustment.
+El parametro manual `rho` controla la direccion y fuerza del ajuste.
 
-- `rho = 0`: same as simple Poisson.
-- `rho < 0`: usually increases `0-0`, `1-0`, `0-1` and decreases `1-1`.
-- `rho > 0`: usually decreases `0-0`, `1-0`, `0-1` and increases `1-1`.
+- `rho = 0`: igual que Poisson simple.
+- `rho < 0`: suele subir `0-0`, `1-0`, `0-1` y bajar `1-1`.
+- `rho > 0`: suele bajar `0-0`, `1-0`, `0-1` y subir `1-1`.
 
-## Important Limitations
+## Limitaciones Importantes
 
-ScoreMatrix is a modeling tool, not a betting system.
+ScoreMatrix es una herramienta de modelado, no un sistema para garantizar apuestas ganadoras.
 
-1X2 odds alone do not fully define the expected total goals. Different matches can have similar 1X2 probabilities but different Over/Under profiles. For stronger calibration, future versions should include optional markets such as:
+Las cuotas 1X2 por si solas no definen completamente el total esperado de goles. Dos partidos pueden tener probabilidades 1X2 parecidas pero perfiles de Over/Under distintos. Para una calibracion mas fuerte, futuras versiones deberian permitir mercados adicionales como:
 
 - Over/Under 2.5.
 - Both Teams To Score.
-- Asian total goals.
-- Correct-score market prices.
+- Totales asiaticos.
+- Precios de mercado de resultado exacto.
 
-The fair odds shown by ScoreMatrix do not include bookmaker margin, liquidity effects, market bias, or commercial pricing adjustments.
+Las cuotas justas mostradas por ScoreMatrix no incluyen margen de bookmaker, liquidez, sesgos de mercado ni ajustes comerciales.
 
-## Project Structure
+## Estructura Del Proyecto
 
 ```text
 ScoreMatrix.Domain
-  Shared models and enums.
+  Modelos y enums compartidos.
 
 ScoreMatrix.Application
-  Odds conversion, lambda optimization, score models, calculator, CSV export.
+  Conversion de odds, optimizacion de lambdas, modelos de score, calculadora y exportacion CSV.
 
 ScoreMatrix.WinForms
-  Windows desktop UI, help window, icon assets.
+  UI desktop, ventana de ayuda e iconos.
 ```
 
-## Repository Notes
+## Notas Del Repositorio
 
-- `ScoreMatrix_Project_Brief.md` contains the original project brief and future ideas.
-- Version `0.01` is the first committed desktop version.
+- `ScoreMatrix_Project_Brief.md` contiene el brief original y posibles ideas futuras.
+- La version `0.01` es la primera version desktop commiteada.
 
