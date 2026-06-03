@@ -15,7 +15,8 @@ public enum ScoreModelType
 public enum DisplayMode
 {
     Probabilities,
-    FairOdds
+    FairOdds,
+    OddsWithMargin
 }
 
 public sealed record MatchInput
@@ -26,17 +27,34 @@ public sealed record MatchInput
     public double HomeOdds { get; init; } = 2.10;
     public double DrawOdds { get; init; } = 3.25;
     public double AwayOdds { get; init; } = 3.60;
+    public bool UseOverUnder25Odds { get; init; }
+    public double Over25Odds { get; init; } = 1.90;
+    public double Under25Odds { get; init; } = 1.90;
+    public bool UseBothTeamsToScoreOdds { get; init; }
+    public double BothTeamsToScoreYesOdds { get; init; } = 1.90;
+    public double BothTeamsToScoreNoOdds { get; init; } = 1.90;
     public double HomeExpectedGoals { get; init; } = 1.40;
     public double AwayExpectedGoals { get; init; } = 1.10;
     public ScoreModelType ModelType { get; init; } = ScoreModelType.Poisson;
     public int MaxGoals { get; init; } = 6;
     public DisplayMode DisplayMode { get; init; } = DisplayMode.Probabilities;
+    public double BookmakerMarginPercent { get; init; }
     public double DixonColesRho { get; init; } = -0.05;
 }
 
 public sealed record MarketProbabilities(double HomeWin, double Draw, double AwayWin)
 {
     public double Sum => HomeWin + Draw + AwayWin;
+}
+
+public sealed record OverUnderMarketProbabilities(double Line, double Over, double Under)
+{
+    public double Sum => Over + Under;
+}
+
+public sealed record BothTeamsToScoreMarketProbabilities(double Yes, double No)
+{
+    public double Sum => Yes + No;
 }
 
 public sealed record ScoreProbability(int HomeGoals, int AwayGoals, double Probability)
@@ -53,6 +71,7 @@ public sealed record ScoreMatrixResult
     public string AwayTeamName { get; init; } = "Visitante";
     public double LambdaHome { get; init; }
     public double LambdaAway { get; init; }
+    public double BookmakerMarginPercent { get; init; }
     public IReadOnlyList<ScoreProbability> Scores { get; init; } = [];
     public double HomeWinProbability { get; init; }
     public double DrawProbability { get; init; }

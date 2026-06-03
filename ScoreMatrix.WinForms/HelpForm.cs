@@ -14,12 +14,14 @@ public sealed class HelpForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Padding = new Padding(16),
             BackColor = Color.White
         };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+        root.Controls.Add(BuildHeader(), 0, 0);
 
         var text = new RichTextBox
         {
@@ -49,13 +51,91 @@ public sealed class HelpForm : Form
         closeButton.Click += (_, _) => Close();
 
         var footer = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+        var copyright = new LinkLabel
+        {
+            Text = $"Copyright (c) {DateTime.Now.Year} Javier Garate Copello. Bajo Licencia MIT.",
+            AutoSize = true,
+            ForeColor = Color.FromArgb(96, 96, 96),
+            LinkColor = Color.FromArgb(24, 98, 110),
+            ActiveLinkColor = Color.FromArgb(18, 72, 82),
+            VisitedLinkColor = Color.FromArgb(24, 98, 110),
+            Font = new Font("Segoe UI", 8),
+            Location = new Point(0, 4)
+        };
+        copyright.Links.Add(copyright.Text.IndexOf("Licencia MIT", StringComparison.Ordinal), "Licencia MIT".Length, "https://opensource.org/license/mit");
+        copyright.LinkClicked += (_, e) =>
+        {
+            if (e.Link?.LinkData is string url)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+            }
+        };
+        footer.Controls.Add(copyright);
         footer.Controls.Add(closeButton);
         closeButton.Location = new Point(footer.Width - closeButton.Width, 6);
         footer.Resize += (_, _) => closeButton.Location = new Point(footer.Width - closeButton.Width, 6);
 
-        root.Controls.Add(text, 0, 0);
-        root.Controls.Add(footer, 0, 1);
+        root.Controls.Add(text, 0, 1);
+        root.Controls.Add(footer, 0, 2);
         Controls.Add(root);
+    }
+
+    private static Control BuildHeader()
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.White,
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        var icon = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Margin = new Padding(0, 0, 12, 16)
+        };
+
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ScoreMatrixIconLarge.png");
+        if (File.Exists(iconPath))
+        {
+            using var image = Image.FromFile(iconPath);
+            icon.Image = new Bitmap(image);
+        }
+
+        var titlePanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.White
+        };
+        titlePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        titlePanel.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        titlePanel.Controls.Add(new Label
+        {
+            Text = "ScoreMatrix",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            Font = new Font("Segoe UI", 16, FontStyle.Bold),
+            ForeColor = Color.FromArgb(24, 58, 62)
+        }, 0, 0);
+        titlePanel.Controls.Add(new Label
+        {
+            Text = "Ayuda y conceptos del modelo",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopLeft,
+            Font = new Font("Segoe UI", 9),
+            ForeColor = Color.FromArgb(96, 96, 96)
+        }, 0, 1);
+
+        panel.Controls.Add(icon, 0, 0);
+        panel.Controls.Add(titlePanel, 1, 0);
+        return panel;
     }
 
     private static string BuildHelpText()
@@ -67,6 +147,12 @@ public sealed class HelpForm : Form
 
         Odds 1X2
         Ingresas las cuotas decimales de victoria local, empate y victoria visitante. La app infiere los goles esperados de cada equipo.
+
+        Usar O/U 2.5
+        En modo Odds 1X2 podes activar tambien cuotas Over 2.5 y Under 2.5. Esto ayuda a calibrar mejor el total esperado de goles.
+
+        Usar BTTS
+        En modo Odds 1X2 podes activar cuotas Both Teams To Score Si/No. Esto ayuda a calibrar la probabilidad de que ambos equipos conviertan.
 
         Goles esperados
         Ingresas directamente Lambda local y Lambda visitante. En este modo no se usan las odds 1X2 ni se optimizan lambdas.
@@ -107,6 +193,10 @@ public sealed class HelpForm : Form
         Limitacion importante:
         Las odds 1X2 no dicen directamente cuantos goles espera el mercado. Dos partidos distintos pueden tener probabilidades 1X2 parecidas pero totales de goles diferentes. Para anclar mejor el total harian falta odds adicionales como Over/Under 2.5 o BTTS.
 
+        Si activas Usar O/U 2.5, la app agrega Over 2.5 y Under 2.5 al objetivo del optimizador. El resultado es un compromiso entre encajar el 1X2 y encajar el total de goles.
+
+        Si activas Usar BTTS, la app tambien agrega BTTS Si y BTTS No al objetivo. El resultado busca encajar mejor la chance de que ambos equipos marquen.
+
 
         4. MODELO POISSON
 
@@ -138,10 +228,12 @@ public sealed class HelpForm : Form
         Queda igual que Poisson simple.
 
         rho < 0
-        Suele subir 0-0, 1-0 y 0-1, y bajar 1-1.
+        Segun el factor Dixon-Coles aplicado, sube 0-0 y 1-1, y baja 1-0 y 0-1.
 
         rho > 0
-        Suele bajar 0-0, 1-0 y 0-1, y subir 1-1.
+        Segun el factor Dixon-Coles aplicado, baja 0-0 y 1-1, y sube 1-0 y 0-1.
+
+        Despues del ajuste, ScoreMatrix renormaliza la matriz para conservar la masa de probabilidad base. Por eso el efecto visible puede variar levemente en la grilla completa.
 
         Dixon-Coles no agrega informacion nueva del mercado. Solo cambia la forma de distribuir probabilidad entre marcadores bajos.
 
@@ -158,6 +250,15 @@ public sealed class HelpForm : Form
         Si un marcador tiene 12.5% de probabilidad:
 
             odd justa = 1 / 0.125 = 8.00
+
+        La vista Odds con margen aplica el Margen % indicado sobre la cuota justa:
+
+            odd con margen = odd justa / (1 + margen / 100)
+
+        Ejemplo:
+        Si la odd justa es 8.00 y el margen es 5%:
+
+            odd con margen = 8.00 / 1.05 = 7.62
 
 
         7. RESUMEN AGREGADO

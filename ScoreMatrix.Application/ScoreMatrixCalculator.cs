@@ -10,6 +10,11 @@ public sealed class ScoreMatrixCalculator(
 
     public ScoreMatrixResult Calculate(MatchInput input)
     {
+        if (input.BookmakerMarginPercent < 0 || input.BookmakerMarginPercent > 50)
+        {
+            throw new ScoreMatrixValidationException("El margen debe estar entre 0% y 50%.");
+        }
+
         var lambda = ResolveLambdas(input);
         IScoreModel model = input.ModelType == ScoreModelType.DixonColes
             ? new DixonColesScoreModel(input.DixonColesRho)
@@ -27,6 +32,7 @@ public sealed class ScoreMatrixCalculator(
             AwayTeamName = NormalizeName(input.AwayTeamName, "Visitante"),
             LambdaHome = lambda.Home,
             LambdaAway = lambda.Away,
+            BookmakerMarginPercent = input.BookmakerMarginPercent,
             Scores = scores,
             HomeWinProbability = summaryScores.Where(score => score.HomeGoals > score.AwayGoals).Sum(score => score.Probability),
             DrawProbability = summaryScores.Where(score => score.HomeGoals == score.AwayGoals).Sum(score => score.Probability),
@@ -53,7 +59,14 @@ public sealed class ScoreMatrixCalculator(
         }
 
         var probabilities = oddsConverter.ToNoMarginProbabilities(input.HomeOdds, input.DrawOdds, input.AwayOdds);
-        return lambdaOptimizer.Optimize(probabilities);
+        var totalGoalsTarget = input.UseOverUnder25Odds
+            ? oddsConverter.ToNoMarginOverUnderProbabilities(2.5, input.Over25Odds, input.Under25Odds)
+            : null;
+        var bothTeamsToScoreTarget = input.UseBothTeamsToScoreOdds
+            ? oddsConverter.ToNoMarginBothTeamsToScoreProbabilities(input.BothTeamsToScoreYesOdds, input.BothTeamsToScoreNoOdds)
+            : null;
+
+        return lambdaOptimizer.Optimize(probabilities, totalGoalsTarget, bothTeamsToScoreTarget);
     }
 
     private static IReadOnlyList<OverUnderProbability> BuildOverUnder(IReadOnlyList<ScoreProbability> scores)
