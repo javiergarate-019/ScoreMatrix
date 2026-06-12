@@ -148,8 +148,8 @@ public sealed class HelpForm : Form
         Odds 1X2
         Ingresas las cuotas decimales de victoria local, empate y victoria visitante. La app infiere los goles esperados de cada equipo.
 
-        Usar O/U 2.5
-        En modo Odds 1X2 podes activar tambien cuotas Over 2.5 y Under 2.5. Esto ayuda a calibrar mejor el total esperado de goles.
+        Usar O/U
+        En modo Odds 1X2 podes activar cuotas Over/Under con una linea configurable (default 2.5). Esto ayuda a calibrar mejor el total esperado de goles.
 
         Usar BTTS
         En modo Odds 1X2 podes activar cuotas Both Teams To Score Si/No. Esto ayuda a calibrar la probabilidad de que ambos equipos conviertan.
@@ -158,47 +158,50 @@ public sealed class HelpForm : Form
         Ingresas directamente Lambda local y Lambda visitante. En este modo no se usan las odds 1X2 ni se optimizan lambdas.
 
 
-        2. DE ODDS A PROBABILIDADES SIN MARGEN
+        2. METODOS DE DE-VIG
 
-        La app convierte cada odd en probabilidad implicita:
+        El de-vig convierte cuotas del bookmaker en probabilidades sin margen. ScoreMatrix ofrece cuatro metodos:
 
-            probabilidad bruta = 1 / odd
+        Proporcional (default)
+        Divide la probabilidad implicita de cada resultado por la suma total. Rapido y estandar.
 
-        Luego normaliza las tres probabilidades para que sumen 100%. Esto quita el margen de forma proporcional:
+        Power (multiplicativo)
+        Busca un exponente k > 1 tal que la suma de (1/odd)^k sea exactamente 1. Corrige mejor el sesgo favorito-longshot que el metodo proporcional.
 
-            p local = p local bruta / suma
-            p empate = p empate bruta / suma
-            p visitante = p visitante bruta / suma
+        Shin (modelo de insiders)
+        Aplica el modelo de Shin (1992), que asume una fraccion z de apuestas informadas. Produce las estimaciones mas precisas en partidos con marcados favoritos. El parametro z se estima internamente por biseccion.
 
-        Es un metodo simple y transparente. No intenta adivinar como distribuyo el margen la casa de apuestas.
+        Aditivo
+        Resta una fraccion igual del margen a cada resultado. Preserva las diferencias absolutas entre probabilidades.
 
 
         3. DE PROBABILIDADES 1X2 A LAMBDAS
 
         Lambda local y Lambda visitante representan los goles esperados de cada equipo.
 
-        Para obtenerlos desde odds 1X2, la app busca dos lambdas que produzcan probabilidades parecidas a las del mercado:
+        Para obtenerlos desde odds 1X2, la app usa un optimizador Nelder-Mead con objetivo KL divergence. El optimizador busca lambdas que produzcan distribuciones 1X2 lo mas cercanas posible a las del mercado.
 
-            - Victoria local: suma de marcadores donde local > visitante.
-            - Empate: suma de marcadores donde local = visitante.
-            - Victoria visitante: suma de marcadores donde local < visitante.
+        Objetivo (KL divergence):
+            error = KL(mercado || modelo) para cada mercado activo (1X2, O/U, BTTS)
 
-        El optimizador minimiza este error:
+        El KL divergence penaliza mejor los desvios en probabilidades que el error cuadratico clasico.
 
-            error =
-              (local modelo - local mercado)^2
-            + (empate modelo - empate mercado)^2
-            + (visitante modelo - visitante mercado)^2
-
-        Limitacion importante:
-        Las odds 1X2 no dicen directamente cuantos goles espera el mercado. Dos partidos distintos pueden tener probabilidades 1X2 parecidas pero totales de goles diferentes. Para anclar mejor el total harian falta odds adicionales como Over/Under 2.5 o BTTS.
-
-        Si activas Usar O/U 2.5, la app agrega Over 2.5 y Under 2.5 al objetivo del optimizador. El resultado es un compromiso entre encajar el 1X2 y encajar el total de goles.
-
-        Si activas Usar BTTS, la app tambien agrega BTTS Si y BTTS No al objetivo. El resultado busca encajar mejor la chance de que ambos equipos marquen.
+        Si activas Usar O/U o Usar BTTS, esos mercados tambien entran al objetivo del optimizador.
 
 
-        4. MODELO POISSON
+        4. AUTO-CALIBRACION DE DEPENDENCIA (rho / lambda3)
+
+        Con los modelos Dixon-Coles o Bivariado Poisson, si activas Usar O/U o Usar BTTS podes marcar
+        "Auto-calibrar". En ese modo, el optimizador Nelder-Mead ajusta tres parametros en lugar de dos:
+        lambda local, lambda visitante y el parametro de dependencia.
+
+        Esto le permite al modelo encontrar el rho (o lambda3) que mejor encaja los mercados disponibles,
+        en vez de usar el valor fijo que ingresas manualmente.
+
+        El valor estimado se muestra junto a los lambdas al calcular.
+
+
+        5. MODELO POISSON
 
         El modelo base asume:
 
@@ -209,36 +212,39 @@ public sealed class HelpForm : Form
 
             P(i-j) = Poisson(i, lambda local) * Poisson(j, lambda visitante)
 
-        Ejemplo:
-        P(2-1) = probabilidad de que el local haga 2 goles multiplicada por la probabilidad de que el visitante haga 1 gol.
+
+        6. MODELO DIXON-COLES
+
+        Dixon-Coles parte de Poisson, pero ajusta marcadores bajos (0-0, 1-0, 0-1, 1-1) con un parametro rho.
+
+        rho = 0: igual que Poisson.
+        rho < 0: sube 0-0 y 1-1, baja 1-0 y 0-1.
+        rho > 0: baja 0-0 y 1-1, sube 1-0 y 0-1.
 
 
-        5. MODELO DIXON-COLES
+        7. MODELO BIVARIADO POISSON
 
-        Dixon-Coles parte de Poisson, pero ajusta marcadores bajos:
+        Captura correlacion positiva entre los goles de ambos equipos usando un parametro de covarianza lambda3.
+        A diferencia de Dixon-Coles, afecta toda la distribucion, no solo marcadores bajos.
 
-            - 0-0
-            - 1-0
-            - 0-1
-            - 1-1
+        Basado en Maher (1982) y Karlis & Ntzoufras (2003).
 
-        El parametro rho controla el ajuste.
-
-        rho = 0
-        Queda igual que Poisson simple.
-
-        rho < 0
-        Segun el factor Dixon-Coles aplicado, sube 0-0 y 1-1, y baja 1-0 y 0-1.
-
-        rho > 0
-        Segun el factor Dixon-Coles aplicado, baja 0-0 y 1-1, y sube 1-0 y 0-1.
-
-        Despues del ajuste, ScoreMatrix renormaliza la matriz para conservar la masa de probabilidad base. Por eso el efecto visible puede variar levemente en la grilla completa.
-
-        Dixon-Coles no agrega informacion nueva del mercado. Solo cambia la forma de distribuir probabilidad entre marcadores bajos.
+        El parametro de dependencia en [-0.25, 0.25] escala la covarianza relativa a las lambdas.
+        Valor 0: equivalente a Poisson independiente.
+        Valor positivo: mayor correlacion (mas goles en el mismo partido).
 
 
-        6. PROBABILIDADES Y ODDS JUSTAS
+        8. MODELO BINOMIAL NEGATIVA
+
+        Usa distribuciones Binomial Negativa en lugar de Poisson para cada equipo (independientes).
+        La varianza supera a la media (sobredispersion), lo que produce colas mas gruesas y mas 0s comparado con Poisson.
+
+        El parametro de dispersion en [-0.25, 0.25] controla la sobredispersion:
+        Valor 0: equivalente a Poisson.
+        Valor positivo: mayor sobredispersion (mas partidos de 0-0 y pocos partidos de muchos goles).
+
+
+        9. PROBABILIDADES Y ODDS JUSTAS
 
         La vista Probabilidades muestra la chance estimada de cada marcador.
 
@@ -246,22 +252,12 @@ public sealed class HelpForm : Form
 
             odd justa = 1 / probabilidad
 
-        Ejemplo:
-        Si un marcador tiene 12.5% de probabilidad:
-
-            odd justa = 1 / 0.125 = 8.00
-
-        La vista Odds con margen aplica el Margen % indicado sobre la cuota justa:
+        La vista Odds con margen aplica el Margen % sobre la cuota justa:
 
             odd con margen = odd justa / (1 + margen / 100)
 
-        Ejemplo:
-        Si la odd justa es 8.00 y el margen es 5%:
 
-            odd con margen = 8.00 / 1.05 = 7.62
-
-
-        7. RESUMEN AGREGADO
+        10. RESUMEN AGREGADO
 
         El resumen muestra mercados derivados de la matriz:
 
@@ -274,22 +270,67 @@ public sealed class HelpForm : Form
         La matriz visible usa el valor de Max goles. El resumen usa internamente hasta 15 goles para no subestimar mercados agregados cuando la grilla visible es mas chica.
 
 
-        8. MASA DE MATRIZ Y RESIDUAL
+        11. MASA DE MATRIZ Y RESIDUAL
 
-        Masa matriz mostrada
-        Indica cuanta probabilidad esta cubierta por los marcadores visibles.
-
-        Residual fuera de rango
-        Indica cuanta probabilidad queda fuera de la matriz visible.
-
-        Ejemplo:
-        Si Max goles es 6, resultados como 7-0 o 6-2 no aparecen en la grilla visible. Esa probabilidad forma parte del residual.
+        Masa matriz mostrada: cuanta probabilidad esta cubierta por los marcadores visibles.
+        Residual: cuanta probabilidad queda fuera de la grilla visible.
 
 
-        9. INTERPRETACION
+        12. MUNDIAL 2026 (THE ODDS API)
 
-        ScoreMatrix no predice resultados garantizados. Calcula probabilidades y cuotas justas segun el modelo elegido.
+        ScoreMatrix puede importar cuotas del Mundial 2026 desde The Odds API: 1X2, Over/Under y BTTS.
 
-        Las cuotas reales de bookmakers incluyen margen, liquidez, sesgos de mercado y ajustes comerciales. Por eso las odds justas del modelo pueden diferir de las cuotas reales.
+        Flujo:
+            1. Ingresa tu API key y la region de bookmakers (eu, uk, us o au).
+            2. Pulsa Buscar partidos para cargar los encuentros disponibles.
+            3. Selecciona un partido y pulsa Traer cuotas.
+
+        La API key se guarda localmente en %APPDATA%\ScoreMatrix\settings.json.
+
+
+        13. PENCA: VALOR ESPERADO DE PUNTAJE
+
+        Para cada marcador candidato, la app calcula:
+
+            EV = suma sobre todos los resultados posibles de P(resultado) * puntos(prediccion, resultado)
+
+        Reglas por defecto (Penca Grupo RAS):
+            - Resultado exacto: 7 puntos
+            - Ganador o empate acertado: 2 puntos
+            - Goles de un equipo acertados: 1 punto
+
+        Podes editar los puntos en Pts exacto, Pts resultado y Pts goles.
+
+
+        14. BACKTEST Y METRICAS DE CALIBRACION
+
+        ScoreMatrix puede evaluar su poder predictivo sobre partidos historicos.
+
+        Flujo:
+            1. Prepara un CSV con partidos historicos (ver formato en la documentacion).
+            2. Abre la ventana Backtest desde el boton de la pantalla principal.
+            3. Carga el CSV, elige el modelo y metodo de de-vig a evaluar y ejecuta el backtest.
+
+        Metricas calculadas:
+
+        RPS (Ranked Probability Score)
+        Estandar de la industria para evaluar pronosticos de 3 resultados ordenados.
+        Rango: [0, 1]. Menor es mejor.
+        Penaliza en forma cuadratica los desvios entre la distribucion acumulada pronosticada y la real.
+
+        Brier Score
+        Error cuadratico entre la probabilidad pronosticada y el resultado real (0 o 1) para victoria local.
+        Rango: [0, 1]. Menor es mejor.
+
+        Log-Loss
+        Penaliza probabilidades extremas que resultan incorrectas. Muy sensible a errores de confianza.
+
+        Curva de calibracion
+        Divide los pronosticos en deciles y compara la frecuencia observada con la pronosticada para victoria local.
+        Una curva cercana a la diagonal indica buena calibracion.
+
+        Formato del CSV de partidos historicos:
+            Columnas requeridas: homeOdds, drawOdds, awayOdds, actualHome, actualAway
+            Columnas opcionales: home, away, overOdds, underOdds, ouLine, bttsYes, bttsNo
         """;
 }

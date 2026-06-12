@@ -9,7 +9,9 @@ public enum InputMode
 public enum ScoreModelType
 {
     Poisson,
-    DixonColes
+    DixonColes,
+    BivariatePoisson,
+    NegativeBinomial
 }
 
 public enum DisplayMode
@@ -17,6 +19,14 @@ public enum DisplayMode
     Probabilities,
     FairOdds,
     OddsWithMargin
+}
+
+public enum DevigMethod
+{
+    Proportional,
+    Power,
+    Shin,
+    Additive
 }
 
 public sealed record MatchInput
@@ -27,9 +37,10 @@ public sealed record MatchInput
     public double HomeOdds { get; init; } = 2.10;
     public double DrawOdds { get; init; } = 3.25;
     public double AwayOdds { get; init; } = 3.60;
-    public bool UseOverUnder25Odds { get; init; }
-    public double Over25Odds { get; init; } = 1.90;
-    public double Under25Odds { get; init; } = 1.90;
+    public bool UseOverUnderOdds { get; init; }
+    public double OverUnderLine { get; init; } = 2.5;
+    public double OverOdds { get; init; } = 1.90;
+    public double UnderOdds { get; init; } = 1.90;
     public bool UseBothTeamsToScoreOdds { get; init; }
     public double BothTeamsToScoreYesOdds { get; init; } = 1.90;
     public double BothTeamsToScoreNoOdds { get; init; } = 1.90;
@@ -40,6 +51,19 @@ public sealed record MatchInput
     public DisplayMode DisplayMode { get; init; } = DisplayMode.Probabilities;
     public double BookmakerMarginPercent { get; init; }
     public double DixonColesRho { get; init; } = -0.05;
+    public bool AutoCalibrateDependence { get; init; }
+    public DevigMethod DevigMethod { get; init; } = DevigMethod.Proportional;
+    public PencaScoringRules PencaScoringRules { get; init; } = PencaScoringRules.Default;
+}
+
+public sealed record PencaScoringRules(int Exact, int Result, int Goals)
+{
+    public static PencaScoringRules Default => new(7, 2, 1);
+}
+
+public sealed record PencaRecommendation(int HomeGoals, int AwayGoals, double ExpectedPoints, double ExactProbability)
+{
+    public string ScoreLabel => $"{HomeGoals}-{AwayGoals}";
 }
 
 public sealed record MarketProbabilities(double HomeWin, double Draw, double AwayWin)
@@ -71,6 +95,7 @@ public sealed record ScoreMatrixResult
     public string AwayTeamName { get; init; } = "Visitante";
     public double LambdaHome { get; init; }
     public double LambdaAway { get; init; }
+    public double EstimatedDependence { get; init; }
     public double BookmakerMarginPercent { get; init; }
     public IReadOnlyList<ScoreProbability> Scores { get; init; } = [];
     public double HomeWinProbability { get; init; }
@@ -82,4 +107,5 @@ public sealed record ScoreMatrixResult
     public double MatrixProbabilityMass { get; init; }
     public double ResidualProbability { get; init; }
     public ScoreProbability? MostLikelyScore { get; init; }
+    public IReadOnlyList<PencaRecommendation> PencaRanking { get; init; } = [];
 }
