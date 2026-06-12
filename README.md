@@ -4,22 +4,29 @@ ScoreMatrix es una aplicacion desktop para Windows que estima probabilidades de 
 
 La app puede partir de cuotas 1X2 de mercado o de goles esperados ingresados manualmente. Luego construye una matriz de marcadores como `0-0`, `1-0`, `2-1`, etc. Cada celda puede verse como probabilidad o como cuota decimal justa.
 
-Version actual: `0.02`
+Version actual: `0.05`
 
 ## Funcionalidades
 
 - UI desktop WinForms para Windows.
 - Entrada desde cuotas decimales 1X2: victoria local, empate, victoria visitante.
-- Calibracion opcional con cuotas Over/Under 2.5.
+- Importacion opcional de cuotas del Mundial 2026 desde [The Odds API](https://the-odds-api.com/liveapi/guides/v4/): 1X2, Over/Under y BTTS cuando esten disponibles (consenso sin margen entre bookmakers).
+- Calibracion opcional con cuotas Over/Under en linea configurable (default 2.5).
 - Calibracion opcional con cuotas Both Teams To Score: Si/No.
 - Entrada desde goles esperados manuales: lambda local y lambda visitante.
-- Conversion proporcional de cuotas 1X2 a probabilidades sin margen.
-- Inferencia de lambdas desde probabilidades 1X2.
-- Modelo Poisson para resultados exactos.
+- **Cuatro metodos de de-vig**: Proporcional (default), Power (corrige sesgo favorito-longshot), Shin (modelo de insiders, mas preciso), Aditivo (resta igual margen).
+- Inferencia de lambdas con **optimizador Nelder-Mead** y objetivo **KL divergence** (mas preciso que minimos cuadrados).
+- **Cuatro modelos de score**:
+  - Poisson: modelo base con distribuciones independientes.
+  - Dixon-Coles: ajusta marcadores bajos con parametro rho.
+  - Bivariado Poisson: captura correlacion positiva entre goles de ambos equipos.
+  - Binomial Negativa: marginales sobredispersas con colas mas gruesas.
+- **Auto-calibracion del parametro de dependencia** (rho/lambda3): cuando hay O/U o BTTS, el optimizador estima el parametro de dependencia en lugar de usar el valor manual.
 - Ajuste Dixon-Coles opcional para marcadores bajos.
 - Rango visible configurable entre 3 y 15 goles.
 - Vista de matriz en probabilidades o cuotas justas.
 - Vista de cuotas con margen comercial configurable.
+- Ranking Penca por valor esperado de puntaje con reglas editables (default: exacto 7, resultado 2, goles 1).
 - Resumen agregado:
   - Victoria local, empate, victoria visitante.
   - Over/Under 0.5, 1.5, 2.5 y 3.5.
@@ -29,6 +36,7 @@ Version actual: `0.02`
   - Probabilidad cubierta por la grilla.
   - Probabilidad fuera de la grilla.
 - Exportacion a CSV.
+- **Modulo de Backtest**: evalua el modelo sobre un CSV de partidos historicos y calcula **RPS** (Ranked Probability Score), **Brier Score**, **Log-Loss** y **curva de calibracion**. Permite comparar configuraciones para tunear el modelo.
 - Ventana de ayuda integrada con explicacion del modelo y los conceptos.
 
 ## Requisitos
@@ -92,42 +100,17 @@ lambdaVisitante
 
 Estos valores representan los goles esperados del equipo local y visitante.
 
-El optimizador prueba pares de lambdas, construye una matriz Poisson interna para cada par y la agrega en tres probabilidades:
+El optimizador usa un **algoritmo Nelder-Mead** (simplex) sembrado desde una busqueda en grilla. Su objetivo es minimizar la **KL divergence** entre las probabilidades del mercado y las del modelo Poisson:
 
 ```text
-P(local gana) = suma de marcadores donde goles local > goles visitante
-P(empate) = suma de marcadores donde goles local == goles visitante
-P(visitante gana) = suma de marcadores donde goles local < goles visitante
+error = KL(mercado || modelo) = sum_i p_mercado_i * log(p_mercado_i / p_modelo_i)
 ```
 
-Luego elige el par que minimiza:
+A diferencia del error cuadratico, el KL divergence es la medida teoricamente correcta para comparar distribuciones de probabilidad y penaliza mejor los desvios lejanos al mercado.
 
-```text
-error =
-  (localModelo - localMercado)^2
-+ (empateModelo - empateMercado)^2
-+ (visitanteModelo - visitanteMercado)^2
-```
+Si se activa `Usar O/U`, la app tambien incluye la KL divergence del mercado Over/Under al objetivo. Si se activa `Usar BTTS`, tambien incluye el mercado BTTS.
 
-Si se activa `Usar O/U 2.5`, la app tambien convierte las cuotas Over/Under 2.5 a probabilidades sin margen y agrega esos desvíos al objetivo:
-
-```text
-+ (over25Modelo - over25Mercado)^2
-+ (under25Modelo - under25Mercado)^2
-```
-
-Esto ayuda a fijar mejor el total esperado de goles cuando las cuotas 1X2 por si solas no alcanzan.
-
-Si se activa `Usar BTTS`, la app tambien usa Both Teams To Score:
-
-```text
-+ (bttsSiModelo - bttsSiMercado)^2
-+ (bttsNoModelo - bttsNoMercado)^2
-```
-
-Esto ayuda a calibrar mejor si la distribucion asigna suficiente probabilidad a marcadores donde ambos equipos convierten.
-
-El optimizador actual usa una busqueda amplia por grilla seguida de refinamiento local.
+Cuando el modelo no es Poisson y se activa `Auto-calibrar`, el optimizador tambien estima el parametro de dependencia (rho para Dixon-Coles, lambda3 para Bivariado) como un tercer parametro libre.
 
 ### 3. Matriz Poisson
 
@@ -181,7 +164,7 @@ Luego ScoreMatrix renormaliza la matriz para conservar la masa de probabilidad b
 
 ScoreMatrix es una herramienta de modelado, no un sistema para garantizar apuestas ganadoras.
 
-Las cuotas 1X2 por si solas no definen completamente el total esperado de goles. Dos partidos pueden tener probabilidades 1X2 parecidas pero perfiles de Over/Under o BTTS distintos. La app permite usar Over/Under 2.5 y BTTS para mejorar esa calibracion. Futuras versiones podrian sumar mercados adicionales como:
+Las cuotas 1X2 por si solas no definen completamente el total esperado de goles. Dos partidos pueden tener probabilidades 1X2 parecidas pero perfiles de Over/Under o BTTS distintos. La app permite usar Over/Under (linea configurable) y BTTS para mejorar esa calibracion. Futuras versiones podrian sumar mercados adicionales como:
 
 - Totales asiaticos.
 - Precios de mercado de resultado exacto.
@@ -203,4 +186,7 @@ ScoreMatrix.WinForms
 
 ## Notas Del Repositorio
 
+- La version `0.05` agrega cuatro metodos de de-vig (Proporcional, Power, Shin, Aditivo), optimizador Nelder-Mead con objetivo KL divergence, dos nuevos modelos (Bivariado Poisson, Binomial Negativa), auto-calibracion del parametro de dependencia desde mercados O/U y BTTS, y el modulo de Backtest con metricas RPS/Brier/LogLoss y curva de calibracion.
+- La version `0.04` agrega importacion opcional de O/U y BTTS desde The Odds API y linea Over/Under configurable en la calibracion.
+- La version `0.03` agrega importacion opcional de cuotas 1X2 del Mundial 2026 desde The Odds API y ranking Penca por valor esperado de puntaje con reglas editables.
 - La version `0.02` agrega calibracion opcional con Over/Under 2.5 y BTTS, margen comercial para odds y mejoras visuales.

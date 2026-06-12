@@ -18,10 +18,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationIcon>Assets\ScoreMatrixIcon.ico</ApplicationIcon>
-    <Version>0.0.2</Version>
-    <AssemblyVersion>0.0.2.0</AssemblyVersion>
-    <FileVersion>0.0.2.0</FileVersion>
-    <InformationalVersion>0.02</InformationalVersion>
+    <Version>0.0.4</Version>
+    <AssemblyVersion>0.0.4.0</AssemblyVersion>
+    <FileVersion>0.0.4.0</FileVersion>
+    <InformationalVersion>0.04</InformationalVersion>
   </PropertyGroup>
 
 </Project>
